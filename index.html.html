@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>經典踩地雷 Minesweeper</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome 圖示 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* 數位字體風計時器 */
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+    .digital-font {
+      font-family: 'Share Tech Mono', monospace;
+    }
+    /* 網格自適應與防止手機長按彈出選單 */
+    .no-select {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      -khtml-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+    }
+    /* 3D 按壓效果 */
+    .mine-cell {
+      transition: all 0.1s ease;
+    }
+    .mine-cell:active:not(.revealed) {
+      background-color: #d1d5db;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between no-select">
+
+  <!-- 頂部導覽列 -->
+  <header class="bg-slate-800 border-b border-slate-700 py-4 px-6 shadow-md">
+    <div class="max-w-6xl mx-auto flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <div class="bg-red-500 p-2 rounded-lg text-white animate-bounce">
+          <i class="fa-solid fa-bomb text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-wider bg-gradient-to-r from-red-400 to-amber-300 bg-clip-text text-transparent">
+            經典踩地雷
+          </h1>
+          <p class="text-xs text-slate-400">極致流暢、手機支援、經典重現</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <button id="btn-sound" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-amber-400 transition" title="切換音效">
+          <i class="fa-solid fa-volume-high" id="sound-icon"></i>
+        </button>
+        <button id="btn-rules" class="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300 transition" title="遊戲說明">
+          <i class="fa-solid fa-circle-question"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主要遊戲區域 -->
+  <main class="flex-grow flex flex-col items-center justify-center p-4">
+    <div class="w-full max-w-4xl bg-slate-800/80 backdrop-blur-md border border-slate-700 rounded-2xl p-6 shadow-2xl">
+      
+      <!-- 難度與控制選項 -->
+      <div class="flex flex-wrap gap-2 justify-center mb-6">
+        <button onclick="changeDifficulty('easy')" id="diff-easy" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30">
+          初級 (9x9)
+        </button>
+        <button onclick="changeDifficulty('medium')" id="diff-medium" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600">
+          中級 (16x16)
+        </button>
+        <button onclick="changeDifficulty('hard')" id="diff-hard" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600">
+          高級 (30x16)
+        </button>
+        <button onclick="openCustomModal()" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600">
+          自訂...
+        </button>
+      </div>
+
+      <!-- 資訊面板 (仿經典計數器) -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 flex justify-between items-center mb-6 max-w-md mx-auto">
+        <!-- 剩餘雷數 -->
+        <div class="text-center">
+          <div class="text-[10px] text-slate-500 uppercase tracking-widest mb-1">REMAINING</div>
+          <div id="mine-counter" class="digital-font text-3xl text-red-500 font-bold tracking-widest bg-slate-900 px-3 py-1 rounded border border-slate-800 min-w-[70px]">
+            010
+          </div>
+        </div>
+
+        <!-- 狀態笑臉表情 -->
+        <button id="face-btn" onclick="initGame()" class="w-14 h-14 rounded-full bg-amber-400 hover:bg-amber-300 active:scale-95 shadow-lg border-4 border-amber-500/50 flex items-center justify-center text-3xl cursor-pointer transition">
+          😃
+        </button>
+
+        <!-- 計時器 -->
+        <div class="text-center">
+          <div class="text-[10px] text-slate-500 uppercase tracking-widest mb-1">TIME</div>
+          <div id="timer" class="digital-font text-3xl text-red-500 font-bold tracking-widest bg-slate-900 px-3 py-1 rounded border border-slate-800 min-w-[70px]">
+            000
+          </div>
+        </div>
+      </div>
+
+      <!-- 行動裝置操作切換 (挖地雷 / 插旗) -->
+      <div class="flex justify-center gap-4 mb-4 md:hidden">
+        <button id="tool-dig" onclick="setMobileTool('dig')" class="flex items-center space-x-2 px-5 py-2.5 rounded-full border-2 border-sky-500 bg-sky-500/20 text-sky-300 font-medium transition">
+          <i class="fa-solid fa-shovel"></i>
+          <span>點擊掘地</span>
+        </button>
+        <button id="tool-flag" onclick="setMobileTool('flag')" class="flex items-center space-x-2 px-5 py-2.5 rounded-full border border-slate-600 bg-slate-700/50 text-slate-400 font-medium transition">
+          <i class="fa-solid fa-flag"></i>
+          <span>插旗標記</span>
+        </button>
+      </div>
+
+      <!-- 遊戲棋盤容器 -->
+      <div class="overflow-auto max-h-[60vh] rounded-xl border border-slate-700 bg-slate-950 p-2 flex justify-center items-start">
+        <div id="minesweeper-grid" class="grid gap-[2px] bg-slate-800 p-[2px] rounded-lg shadow-inner">
+          <!-- JS 動態生成格子 -->
+        </div>
+      </div>
+
+      <!-- 個人最佳紀錄展示 -->
+      <div class="mt-6 border-t border-slate-700/50 pt-4 flex flex-wrap justify-around text-xs text-slate-400">
+        <div>初級紀錄: <span id="best-easy" class="font-bold text-emerald-400">-</span> 秒</div>
+        <div>中級紀錄: <span id="best-medium" class="font-bold text-sky-400">-</span> 秒</div>
+        <div>高級紀錄: <span id="best-hard" class="font-bold text-amber-400">-</span> 秒</div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- 頁尾 -->
+  <footer class="bg-slate-950/80 py-4 border-t border-slate-900 text-center text-xs text-slate-500">
+    <p>© 2026 經典踩地雷. 網頁設計由極客工程師精心打造.</p>
+  </footer>
+
+  <!-- 自訂難度彈出視窗 -->
+  <div id="custom-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl scale-95 transition-all">
+      <h3 class="text-lg font-bold text-slate-100 mb-4 flex items-center">
+        <i class="fa-solid fa-sliders text-amber-400 mr-2"></i> 自訂棋盤設定
+      </h3>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">欄寬 (Width, 8-50)</label>
+          <input id="custom-width" type="number" min="8" max="50" value="10" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">列高 (Height, 8-30)</label>
+          <input id="custom-height" type="number" min="8" max="30" value="10" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-400">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">地雷數量 (Mines, 1-300)</label>
+          <input id="custom-mines" type="number" min="1" max="300" value="10" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-400">
+        </div>
+      </div>
+      <div class="flex justify-end space-x-3 mt-6">
+        <button onclick="closeCustomModal()" class="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition text-sm">取消</button>
+        <button onclick="applyCustomSettings()" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold rounded-lg hover:from-amber-400 hover:to-yellow-400 transition text-sm">確認套用</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 規則說明彈出視窗 -->
+  <div id="rules-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+      <h3 class="text-lg font-bold text-slate-100 mb-4 flex items-center border-b border-slate-700 pb-2">
+        <i class="fa-solid fa-circle-question text-sky-400 mr-2"></i> 遊戲規則與操作
+      </h3>
+      <div class="text-sm text-slate-300 space-y-3 leading-relaxed">
+        <p><strong class="text-white">🎯 遊戲目標：</strong> 找出所有沒有地雷的格子，並且不要踩到任何一個地雷！</p>
+        <p><strong class="text-sky-400">💻 電腦操作：</strong></p>
+        <ul class="list-disc list-inside space-y-1 pl-2">
+          <li><span class="text-amber-300 font-semibold">滑鼠左鍵</span>：挖掘該格子。</li>
+          <li><span class="text-amber-300 font-semibold">滑鼠右鍵</span>：插旗標記地雷（再點一次取消）。</li>
+          <li><span class="text-amber-300 font-semibold">雙擊 / 左右鍵同按</span>：在已翻開數字格上使用，若周圍標記的旗子數與該格數字相同，會自動「快速排雷」掃開周圍其餘格子。</li>
+        </ul>
+        <p><strong class="text-sky-400">📱 手機操作：</strong></p>
+        <ul class="list-disc list-inside space-y-1 pl-2">
+          <li>利用下方快速按鈕切換「<span class="text-sky-300">挖地雷</span>」與「<span class="text-red-400">插旗</span>」模式。</li>
+          <li>在「挖地雷」下點擊為開啟格子，「長按」也可快速插旗。</li>
+        </ul>
+      </div>
+      <div class="flex justify-end mt-6">
+        <button onclick="closeRulesModal()" class="px-5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold rounded-lg transition text-sm">我知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 遊戲勝負浮動通知 -->
+  <div id="game-status-toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-slate-800 border-2 border-slate-700 px-6 py-3 rounded-full shadow-2xl hidden items-center space-x-3 z-40 animate-bounce">
+    <span id="toast-icon" class="text-2xl">🏆</span>
+    <span id="toast-text" class="text-sm font-bold tracking-wide text-white">恭喜挑戰成功！</span>
+  </div>
+
+  <!-- 音效產生器 & 遊戲核心邏輯 -->
+  <script>
+    // --- 音效系統 (使用 Web Audio API，無需外載音檔) ---
+    class SoundEffects {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+      init() {
+        if (!this.ctx) {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+      }
+      playClick() {
+        if (!this.enabled) return;
+        this.init();
+        let osc = this.ctx.createOscillator();
+        let gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(150, this.ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.08);
+      }
+      playFlag() {
+        if (!this.enabled) return;
+        this.init();
+        let osc = this.ctx.createOscillator();
+        let gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+        osc.frequency.setValueAtTime(450, this.ctx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.15);
+      }
+      playExplode() {
+        if (!this.enabled) return;
+        this.init();
+        // 雜訊產生爆炸感
+        let bufferSize = this.ctx.sampleRate * 0.5;
+        let buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        let data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        let noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        let filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(800, this.ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.4);
+        let gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start();
+        noise.stop(this.ctx.currentTime + 0.5);
+      }
+      playWin() {
+        if (!this.enabled) return;
+        this.init();
+        let notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+        notes.forEach((freq, idx) => {
+          let osc = this.ctx.createOscillator();
+          let gain = this.ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0, this.ctx.currentTime + idx * 0.1);
+          gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + idx * 0.1 + 0.02);
+          gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + idx * 0.1 + 0.2);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + idx * 0.1);
+          osc.stop(this.ctx.currentTime + idx * 0.1 + 0.2);
+        });
+      }
+    }
+
+    const sound = new SoundEffects();
+
+    // 音效按鈕控制
+    document.getElementById('btn-sound').addEventListener('click', () => {
+      sound.enabled = !sound.enabled;
+      const icon = document.getElementById('sound-icon');
+      if (sound.enabled) {
+        icon.className = 'fa-solid fa-volume-high';
+        sound.playClick();
+      } else {
+        icon.className = 'fa-solid fa-volume-xmark text-slate-500';
+      }
+    });
+
+    // --- 遊戲邏輯與參數變數 ---
+    const DIFFICULTY_PRESETS = {
+      easy: { cols: 9, rows: 9, mines: 10 },
+      medium: { cols: 16, rows: 16, mines: 40 },
+      hard: { cols: 30, rows: 16, mines: 99 }
+    };
+
+    let currentDifficulty = 'easy';
+    let cols = 9;
+    let rows = 9;
+    let totalMines = 10;
+
+    let grid = []; // 儲存格子邏輯數據
+    let gameOver = false;
+    let gameWon = false;
+    let gameStarted = false;
+    let flagsLeft = 10;
+    let timeElapsed = 0;
+    let timerInterval = null;
+
+    // 手機版工具模式: 'dig' (掘) or 'flag' (旗)
+    let mobileTool = 'dig'; 
+
+    // 初始化與加載
+    window.addEventListener('load', () => {
+      loadBestScores();
+      initGame();
+      
+      // 防止網格區域右鍵彈出選單
+      document.getElementById('minesweeper-grid').addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+      });
+
+      // 監聽說明對話盒
+      document.getElementById('btn-rules').addEventListener('click', () => {
+        document.getElementById('rules-modal').classList.remove('hidden');
+        document.getElementById('rules-modal').classList.add('flex');
+      });
+    });
+
+    // 載入最快紀錄
+    function loadBestScores() {
+      const easy = localStorage.getItem('minesweeper_best_easy') || '-';
+      const medium = localStorage.getItem('minesweeper_best_medium') || '-';
+      const hard = localStorage.getItem('minesweeper_best_hard') || '-';
+      document.getElementById('best-easy').innerText = easy;
+      document.getElementById('best-medium').innerText = medium;
+      document.getElementById('best-hard').innerText = hard;
+    }
+
+    // 更新最快紀錄
+    function updateBestScores() {
+      if (['easy', 'medium', 'hard'].includes(currentDifficulty)) {
+        const key = `minesweeper_best_${currentDifficulty}`;
+        const prevBest = localStorage.getItem(key);
+        if (!prevBest || timeElapsed < parseInt(prevBest)) {
+          localStorage.setItem(key, timeElapsed);
+          loadBestScores();
+        }
+      }
+    }
+
+    // 變更難度
+    function changeDifficulty(preset) {
+      if (preset === 'custom') return;
+      currentDifficulty = preset;
+      cols = DIFFICULTY_PRESETS[preset].cols;
+      rows = DIFFICULTY_PRESETS[preset].rows;
+      totalMines = DIFFICULTY_PRESETS[preset].mines;
+
+      // 更新按鈕樣式
+      ['easy', 'medium', 'hard'].forEach(diff => {
+        const btn = document.getElementById(`diff-${diff}`);
+        if (diff === preset) {
+          btn.className = btn.className.replace('bg-slate-700 text-slate-300', 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30');
+          btn.className = btn.className.replace('hover:bg-slate-600', '');
+        } else {
+          btn.className = 'px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600';
+        }
+      });
+
+      initGame();
+    }
+
+    // 自訂視窗
+    function openCustomModal() {
+      document.getElementById('custom-modal').classList.remove('hidden');
+      document.getElementById('custom-modal').classList.add('flex');
+    }
+    function closeCustomModal() {
+      document.getElementById('custom-modal').classList.add('hidden');
+      document.getElementById('custom-modal').classList.remove('flex');
+    }
+    function applyCustomSettings() {
+      const w = parseInt(document.getElementById('custom-width').value);
+      const h = parseInt(document.getElementById('custom-height').value);
+      const m = parseInt(document.getElementById('custom-mines').value);
+
+      if (isNaN(w) || w < 8 || w > 50) { showToast('❌', '寬度限制為 8 至 50'); return; }
+      if (isNaN(h) || h < 8 || h > 30) { showToast('❌', '高度限制為 8 至 30'); return; }
+      if (isNaN(m) || m < 1 || m >= w * h) { showToast('❌', '地雷數必須介於 1 與格子總數之間'); return; }
+
+      currentDifficulty = 'custom';
+      cols = w;
+      rows = h;
+      totalMines = m;
+
+      // 清除難度按鈕的高亮
+      ['easy', 'medium', 'hard'].forEach(diff => {
+        const btn = document.getElementById(`diff-${diff}`);
+        btn.className = 'px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600';
+      });
+
+      closeCustomModal();
+      initGame();
+    }
+
+    // 說明視窗
+    function closeRulesModal() {
+      document.getElementById('rules-modal').classList.add('hidden');
+      document.getElementById('rules-modal').classList.remove('flex');
+    }
+
+    // 吐司通知
+    function showToast(icon, text) {
+      const toast = document.getElementById('game-status-toast');
+      document.getElementById('toast-icon').innerText = icon;
+      document.getElementById('toast-text').innerText = text;
+      toast.classList.remove('hidden');
+      toast.classList.add('flex');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+        toast.classList.remove('flex');
+      }, 4000);
+    }
+
+    // 手機操作模式變更
+    function setMobileTool(mode) {
+      mobileTool = mode;
+      const btnDig = document.getElementById('tool-dig');
+      const btnFlag = document.getElementById('tool-flag');
+      sound.playClick();
+
+      if (mode === 'dig') {
+        btnDig.className = "flex items-center space-x-2 px-5 py-2.5 rounded-full border-2 border-sky-500 bg-sky-500/20 text-sky-300 font-medium transition";
+        btnFlag.className = "flex items-center space-x-2 px-5 py-2.5 rounded-full border border-slate-600 bg-slate-700/50 text-slate-400 font-medium transition";
+      } else {
+        btnDig.className = "flex items-center space-x-2 px-5 py-2.5 rounded-full border border-slate-600 bg-slate-700/50 text-slate-400 font-medium transition";
+        btnFlag.className = "flex items-center space-x-2 px-5 py-2.5 rounded-full border-2 border-red-500 bg-red-500/20 text-red-300 font-medium transition";
+      }
+    }
+
+    // --- 初始化棋盤 ---
+    function initGame() {
+      // 重置狀態
+      gameOver = false;
+      gameWon = false;
+      gameStarted = false;
+      flagsLeft = totalMines;
+      timeElapsed = 0;
+      
+      clearInterval(timerInterval);
+      timerInterval = null;
+
+      document.getElementById('mine-counter').innerText = String(flagsLeft).padStart(3, '0');
+      document.getElementById('timer').innerText = '000';
+      document.getElementById('face-btn').innerText = '😃';
+      document.getElementById('game-status-toast').classList.add('hidden');
+
+      grid = [];
+      const gridContainer = document.getElementById('minesweeper-grid');
+      gridContainer.innerHTML = '';
+
+      // 設定 Grid CSS 網格列數
+      gridContainer.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+
+      // 建立二維網格結構並渲染到畫面上
+      for (let r = 0; r < rows; r++) {
+        grid[r] = [];
+        for (let c = 0; c < cols; c++) {
+          grid[r][c] = {
+            row: r,
+            col: c,
+            isMine: false,
+            isRevealed: false,
+            isFlagged: false,
+            neighborMines: 0
+          };
+
+          // 創建 HTML 格子元件
+          const cellEl = document.createElement('div');
+          cellEl.id = `cell-${r}-${c}`;
+          // 基礎響應式尺寸：手機自動縮放
+          cellEl.className = "mine-cell w-8 h-8 md:w-9 md:h-9 bg-slate-700 hover:bg-slate-600 border border-slate-800 rounded flex items-center justify-center font-black cursor-pointer transition shadow-sm text-sm no-select";
+          
+          // 滑鼠點擊監聽 (左鍵挖地雷)
+          cellEl.addEventListener('click', (e) => {
+            handleCellClick(r, c);
+          });
+
+          // 滑鼠右鍵監聽 (右鍵插旗)
+          cellEl.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            handleCellRightClick(r, c);
+          });
+
+          // 支援長按 (手機端模擬插旗)
+          let touchTimer;
+          cellEl.addEventListener('touchstart', (e) => {
+            touchTimer = setTimeout(() => {
+              handleCellRightClick(r, c);
+              // 手機震動回饋 (如果裝置支援)
+              if (navigator.vibrate) navigator.vibrate(30);
+            }, 550); // 550毫秒算長按
+          }, { passive: true });
+
+          cellEl.addEventListener('touchend', () => {
+            clearTimeout(touchTimer);
+          });
+          cellEl.addEventListener('touchmove', () => {
+            clearTimeout(touchTimer);
+          });
+
+          // 雙擊事件 (快速排雷)
+          cellEl.addEventListener('dblclick', () => {
+            quickReveal(r, c);
+          });
+
+          gridContainer.appendChild(cellEl);
+        }
+      }
+    }
+
+    // 開始計時器
+    function startTimer() {
+      if (timerInterval) return;
+      timerInterval = setInterval(() => {
+        timeElapsed++;
+        if (timeElapsed >= 999) {
+          timeElapsed = 999;
+          clearInterval(timerInterval);
+        }
+        document.getElementById('timer').innerText = String(timeElapsed).padStart(3, '0');
+      }, 1000);
+    }
+
+    // --- 生成地雷與计算周圍地雷 (第一次點擊不踩雷保護機制) ---
+    function generateMines(firstRow, firstCol) {
+      let minesPlaced = 0;
+      while (minesPlaced < totalMines) {
+        const randRow = Math.floor(Math.random() * rows);
+        const randCol = Math.floor(Math.random() * cols);
+
+        // 確保地雷不在起點及其周圍一圈，確保良好的第一點安全體驗
+        const isSafeZone = Math.abs(randRow - firstRow) <= 1 && Math.abs(randCol - firstCol) <= 1;
+
+        if (!grid[randRow][randCol].isMine && !isSafeZone) {
+          grid[randRow][randCol].isMine = true;
+          minesPlaced++;
+        }
+      }
+
+      // 計算每個格子的相鄰雷數
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (!grid[r][c].isMine) {
+            grid[r][c].neighborMines = countNeighborMines(r, c);
+          }
+        }
+      }
+    }
+
+    // 計算相鄰雷數輔助
+    function countNeighborMines(row, col) {
+      let count = 0;
+      for (let rOffset = -1; rOffset <= 1; rOffset++) {
+        for (let cOffset = -1; cOffset <= 1; cOffset++) {
+          const checkR = row + rOffset;
+          const checkC = col + cOffset;
+          if (checkR >= 0 && checkR < rows && checkC >= 0 && checkC < cols) {
+            if (grid[checkR][checkC].isMine) {
+              count++;
+            }
+          }
+        }
+      }
+      return count;
+    }
+
+    // --- 左鍵挖掘事件 ---
+    function handleCellClick(r, c) {
+      if (gameOver || gameWon) return;
+
+      const cell = grid[r][c];
+      if (cell.isFlagged) return;
+
+      // 手機版插旗模式優先
+      if (window.innerWidth < 768 && mobileTool === 'flag') {
+        handleCellRightClick(r, c);
+        return;
+      }
+
+      // 如果是第一次點擊，生成地雷，實施開局保護
+      if (!gameStarted) {
+        gameStarted = true;
+        generateMines(r, c);
+        startTimer();
+      }
+
+      // 如果踩到雷
+      if (cell.isMine) {
+        triggerGameOver(r, c);
+        return;
+      }
+
+      revealCell(r, c);
+      sound.playClick();
+      checkWinCondition();
+    }
+
+    // --- 遞迴翻開格子 (Flood Fill 演算法) ---
+    function revealCell(r, c) {
+      const cell = grid[r][c];
+      if (cell.isRevealed || cell.isFlagged) return;
+
+      cell.isRevealed = true;
+      const el = document.getElementById(`cell-${r}-${c}`);
+      
+      // 樣式更新：翻開後
+      el.className = "mine-cell w-8 h-8 md:w-9 md:h-9 bg-slate-900 border border-slate-950 rounded flex items-center justify-center font-black text-sm shadow-inner transition no-select";
+
+      if (cell.neighborMines > 0) {
+        el.innerText = cell.neighborMines;
+        // 為不同數字自訂專屬色系，仿經典版配色
+        const colors = [
+          "", "text-sky-400", "text-emerald-400", "text-red-400", 
+          "text-indigo-400", "text-amber-500", "text-cyan-400", 
+          "text-fuchsia-400", "text-rose-600"
+        ];
+        el.classList.add(colors[cell.neighborMines]);
+      } else {
+        // 周圍無雷，遞迴翻開鄰近的 8 格
+        for (let rOffset = -1; rOffset <= 1; rOffset++) {
+          for (let cOffset = -1; cOffset <= 1; cOffset++) {
+            const nextR = r + rOffset;
+            const nextC = c + cOffset;
+            if (nextR >= 0 && nextR < rows && nextC >= 0 && nextC < cols) {
+              revealCell(nextR, nextC);
+            }
+          }
+        }
+      }
+    }
+
+    // --- 右鍵 / 長按插旗事件 ---
+    function handleCellRightClick(r, c) {
+      if (gameOver || gameWon) return;
+      
+      // 開局前防錯
+      if (!gameStarted) {
+        gameStarted = true;
+        generateMines(r, c);
+        startTimer();
+      }
+
+      const cell = grid[r][c];
+      if (cell.isRevealed) return;
+
+      const el = document.getElementById(`cell-${r}-${c}`);
+
+      if (cell.isFlagged) {
+        // 取消插旗
+        cell.isFlagged = false;
+        flagsLeft++;
+        el.innerHTML = '';
+        el.className = "mine-cell w-8 h-8 md:w-9 md:h-9 bg-slate-700 hover:bg-slate-600 border border-slate-800 rounded flex items-center justify-center font-black cursor-pointer shadow-sm text-sm no-select";
+        sound.playFlag();
+      } else {
+        // 插旗
+        if (flagsLeft > 0 || currentDifficulty === 'custom') { // 自訂地雷較多時允許超額插旗
+          cell.isFlagged = true;
+          flagsLeft--;
+          el.innerHTML = '<i class="fa-solid fa-flag text-red-500 text-xs md:text-sm animate-wiggle"></i>';
+          el.className = "mine-cell w-8 h-8 md:w-9 md:h-9 bg-slate-700 border border-slate-800 rounded flex items-center justify-center font-black cursor-pointer shadow-sm text-sm no-select";
+          sound.playFlag();
+        }
+      }
+
+      document.getElementById('mine-counter').innerText = String(Math.max(0, flagsLeft)).padStart(3, '0');
+    }
+
+    // --- 雙擊/同按快速排雷 ---
+    function quickReveal(r, c) {
+      if (gameOver || gameWon) return;
+      const cell = grid[r][c];
+      if (!cell.isRevealed || cell.neighborMines === 0) return;
+
+      // 計算鄰近格子中已插旗的數量
+      let flaggedCount = 0;
+      const neighbors = [];
+
+      for (let rOffset = -1; rOffset <= 1; rOffset++) {
+        for (let cOffset = -1; cOffset <= 1; cOffset++) {
+          const nextR = r + rOffset;
+          const nextC = c + cOffset;
+          if (nextR >= 0 && nextR < rows && nextC >= 0 && nextC < cols) {
+            const neighbor = grid[nextR][nextC];
+            neighbors.push(neighbor);
+            if (neighbor.isFlagged) {
+              flaggedCount++;
+            }
+          }
+        }
+      }
+
+      // 如果插旗數等於數字，則翻開周圍剩下所有未插旗的格子
+      if (flaggedCount === cell.neighborMines) {
+        let hitMine = false;
+        neighbors.forEach(neighbor => {
+          if (!neighbor.isRevealed && !neighbor.isFlagged) {
+            if (neighbor.isMine) {
+              hitMine = true;
+              triggerGameOver(neighbor.row, neighbor.col);
+            } else {
+              revealCell(neighbor.row, neighbor.col);
+            }
+          }
+        });
+        if (!hitMine) {
+          sound.playClick();
+          checkWinCondition();
+        }
+      }
+    }
+
+    // --- 遊戲勝負判定與展示 ---
+    function triggerGameOver(hitR, hitC) {
+      gameOver = true;
+      clearInterval(timerInterval);
+      sound.playExplode();
+      document.getElementById('face-btn').innerText = '😵';
+
+      // 翻開所有地雷以昭昭天下
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cell = grid[r][c];
+          const el = document.getElementById(`cell-${r}-${c}`);
+          
+          if (cell.isMine) {
+            if (r === hitR && c === hitC) {
+              // 踩爆的雷：深紅背景
+              el.className = "mine-cell w-8 h-8 md:w-9 md:h-9 bg-red-600 border border-slate-950 rounded flex items-center justify-center font-black text-sm shadow-inner transition no-select text-white";
+              el.innerHTML = '<i class="fa-solid fa-bomb text-slate-100"></i>';
+            } else if (!cell.isFlagged) {
+              // 普通顯示未找到的地雷
+              el.className = "mine-cell w-8 h-8 md:w-9 md:h-9 bg-slate-800 border border-slate-950 rounded flex items-center justify-center font-black text-sm shadow-inner transition no-select text-red-500";
+              el.innerHTML = '<i class="fa-solid fa-bomb text-red-500"></i>';
+            }
+          } else if (cell.isFlagged) {
+            // 標記錯誤的旗子：打叉紅旗
+            el.innerHTML = '<i class="fa-solid fa-circle-xmark text-yellow-400"></i>';
+          }
+        }
+      }
+
+      showToast('💥', '糟糕！你踩到地雷了！');
+    }
+
+    function checkWinCondition() {
+      let win = true;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cell = grid[r][c];
+          // 如果還有非地雷格未翻開，則尚未獲勝
+          if (!cell.isMine && !cell.isRevealed) {
+            win = false;
+            break;
+          }
+        }
+      }
+
+      if (win) {
+        gameWon = true;
+        clearInterval(timerInterval);
+        sound.playWin();
+        document.getElementById('face-btn').innerText = '😎';
+
+        // 將剩餘的地雷都插上旗子
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const cell = grid[r][c];
+            if (cell.isMine && !cell.isFlagged) {
+              cell.isFlagged = true;
+              const el = document.getElementById(`cell-${r}-${c}`);
+              el.innerHTML = '<i class="fa-solid fa-flag text-red-500 text-xs md:text-sm animate-bounce"></i>';
+            }
+          }
+        }
+        document.getElementById('mine-counter').innerText = '000';
+
+        // 紀錄與通關展示
+        showToast('🏆', `恭喜你！在 ${timeElapsed} 秒內解鎖了所有非雷區！`);
+        updateBestScores();
+      }
+    }
+  </script>
+</body>
+</html>
